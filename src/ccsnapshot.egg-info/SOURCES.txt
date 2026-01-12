@@ -1,0 +1,12 @@
+README.md
+pyproject.toml
+src/ccsnapshot/__init__.py
+src/ccsnapshot/git_stats.py
+src/ccsnapshot/render.py
+src/ccsnapshot/share_threads.py
+src/ccsnapshot/time_stats.py
+src/ccsnapshot.egg-info/PKG-INFO
+src/ccsnapshot.egg-info/SOURCES.txt
+src/ccsnapshot.egg-info/dependency_links.txt
+src/ccsnapshot.egg-info/requires.txt
+src/ccsnapshot.egg-info/top_level.txt

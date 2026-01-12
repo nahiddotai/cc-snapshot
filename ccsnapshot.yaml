@@ -1,0 +1,14 @@
+# CC Snapshot Configuration
+
+# Optional: Override the project start date (YYYY-MM-DD)
+# If not set, uses the date of your first git commit
+# project_start_date: "2025-01-01"
+
+# Minutes of inactivity before a new coding session starts
+session_gap_minutes: 45
+
+# How many days to include in stats
+window_days: 7
+
+# Title shown on the snapshot card
+title: "CC Snapshot"

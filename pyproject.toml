@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ccsnapshot"
+version = "0.1.0"
+description = "Generate Threads-ready progress cards for Claude Code builders"
+requires-python = ">=3.9"
+dependencies = [
+    "streamlit>=1.28.0",
+    "pillow>=10.0.0",
+    "pyyaml>=6.0",
+    "gitpython>=3.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
