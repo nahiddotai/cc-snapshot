@@ -25,7 +25,7 @@ from src.ccsnapshot.share_threads import (
     get_threads_url,
     save_caption,
 )
-from src.ccsnapshot.time_stats import get_daily_minutes, get_total_build_time
+from src.ccsnapshot.time_stats import get_daily_minutes, get_project_duration
 
 # Page config
 st.set_page_config(
@@ -67,7 +67,7 @@ def generate_snapshot(config: dict, project_name: str) -> tuple:
 
     metrics = SnapshotMetrics(
         streak=get_streak(recent_commits),
-        total_minutes=get_total_build_time(all_commits, gap_minutes),
+        total_minutes=get_project_duration(all_commits),
         files_changed=get_files_changed(recent_commits),
         daily_minutes=get_daily_minutes(recent_commits, gap_minutes, 7),
         day_number=get_day_number(),

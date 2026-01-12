@@ -123,3 +123,21 @@ def format_duration(minutes: int) -> str:
         return f"{hours}h"
 
     return f"{hours}h {remaining_minutes}m"
+
+
+def get_project_duration(commits: list[CommitInfo]) -> int:
+    """
+    Calculate total project duration in minutes.
+
+    Returns elapsed time between first and most recent commit.
+    """
+    if not commits or len(commits) < 2:
+        return 0
+
+    # Sort by timestamp
+    sorted_commits = sorted(commits, key=lambda c: c.timestamp)
+    first = sorted_commits[0].timestamp
+    last = sorted_commits[-1].timestamp
+
+    elapsed = (last - first).total_seconds() / 60
+    return int(elapsed)
