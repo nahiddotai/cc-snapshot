@@ -4,26 +4,17 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
-from typing import Union
+from typing import Optional, Tuple, Union
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
+from .theme import DEFAULT_THEME, ThemeTokens, get_theme
 from .time_stats import format_duration
 
 
 # Card dimensions (Threads optimal)
 WIDTH = 1080
 HEIGHT = 1350
-
-# Colors
-BG_TOP = (26, 26, 46)       # #1a1a2e
-BG_BOTTOM = (22, 33, 62)    # #16213e
-CARD_BG = (30, 41, 59)      # #1e293b
-ACCENT = (99, 102, 241)     # #6366f1 (indigo)
-TEXT_PRIMARY = (255, 255, 255)
-TEXT_SECONDARY = (148, 163, 184)  # #94a3b8
-BAR_COLOR = (99, 102, 241)  # #6366f1
-BAR_EMPTY = (51, 65, 85)    # #334155
 
 
 @dataclass
@@ -38,14 +29,18 @@ class SnapshotMetrics:
     project_name: str = ""
 
 
-def create_gradient_background(width: int, height: int) -> Image.Image:
-    """Create a vertical gradient background."""
+def create_gradient_background(
+    width: int, height: int, theme: ThemeTokens
+) -> Image.Image:
+    """Create a vertical gradient background using theme colors."""
     img = Image.new('RGB', (width, height))
+    top = theme.bg_gradient_top
+    bottom = theme.bg_gradient_bottom
     for y in range(height):
         ratio = y / height
-        r = int(BG_TOP[0] + (BG_BOTTOM[0] - BG_TOP[0]) * ratio)
-        g = int(BG_TOP[1] + (BG_BOTTOM[1] - BG_TOP[1]) * ratio)
-        b = int(BG_TOP[2] + (BG_BOTTOM[2] - BG_TOP[2]) * ratio)
+        r = int(top[0] + (bottom[0] - top[0]) * ratio)
+        g = int(top[1] + (bottom[1] - top[1]) * ratio)
+        b = int(top[2] + (bottom[2] - top[2]) * ratio)
         for x in range(width):
             img.putpixel((x, y), (r, g, b))
     return img
@@ -75,11 +70,11 @@ def get_font(size: int) -> ImageFont.FreeTypeFont:
 
 def draw_rounded_rect(
     draw: ImageDraw.ImageDraw,
-    xy: tuple[int, int, int, int],
+    xy: Tuple[int, int, int, int],
     radius: int,
-    fill: tuple[int, int, int]
+    fill: Union[Tuple[int, int, int], Tuple[int, int, int, int]]
 ) -> None:
-    """Draw a rounded rectangle."""
+    """Draw a rounded rectangle (supports RGB or RGBA fill)."""
     x1, y1, x2, y2 = xy
     draw.rectangle([x1 + radius, y1, x2 - radius, y2], fill=fill)
     draw.rectangle([x1, y1 + radius, x2, y2 - radius], fill=fill)
@@ -89,11 +84,187 @@ def draw_rounded_rect(
     draw.ellipse([x2 - radius * 2, y2 - radius * 2, x2, y2], fill=fill)
 
 
-def render_snapshot(metrics: SnapshotMetrics) -> Image.Image:
-    """Render the snapshot card as a PIL Image."""
+def draw_rounded_rect_outline(
+    draw: ImageDraw.ImageDraw,
+    xy: Tuple[int, int, int, int],
+    radius: int,
+    outline: Tuple[int, int, int, int],
+    width: int = 2
+) -> None:
+    """Draw a rounded rectangle outline (border only)."""
+    x1, y1, x2, y2 = xy
+    # Top edge
+    draw.line([(x1 + radius, y1), (x2 - radius, y1)], fill=outline, width=width)
+    # Bottom edge
+    draw.line([(x1 + radius, y2), (x2 - radius, y2)], fill=outline, width=width)
+    # Left edge
+    draw.line([(x1, y1 + radius), (x1, y2 - radius)], fill=outline, width=width)
+    # Right edge
+    draw.line([(x2, y1 + radius), (x2, y2 - radius)], fill=outline, width=width)
+    # Corner arcs (using ellipse outline)
+    draw.arc([x1, y1, x1 + radius * 2, y1 + radius * 2], 180, 270, fill=outline, width=width)
+    draw.arc([x2 - radius * 2, y1, x2, y1 + radius * 2], 270, 360, fill=outline, width=width)
+    draw.arc([x1, y2 - radius * 2, x1 + radius * 2, y2], 90, 180, fill=outline, width=width)
+    draw.arc([x2 - radius * 2, y2 - radius * 2, x2, y2], 0, 90, fill=outline, width=width)
+
+
+def apply_glow(
+    base_img: Image.Image,
+    xy: Tuple[int, int, int, int],
+    radius: int,
+    glow_color: Tuple[int, int, int, int],
+    blur_radius: int,
+    strength: float
+) -> Image.Image:
+    """Apply a soft glow effect around a rounded rectangle area."""
+    # Create glow layer
+    glow_layer = Image.new('RGBA', base_img.size, (0, 0, 0, 0))
+    glow_draw = ImageDraw.Draw(glow_layer)
+
+    # Draw slightly larger shape for glow
+    x1, y1, x2, y2 = xy
+    expand = blur_radius
+    glow_xy = (x1 - expand, y1 - expand, x2 + expand, y2 + expand)
+    draw_rounded_rect(glow_draw, glow_xy, radius + expand // 2, glow_color)
+
+    # Apply blur
+    glow_layer = glow_layer.filter(ImageFilter.GaussianBlur(blur_radius))
+
+    # Adjust strength by modifying alpha
+    if strength < 1.0:
+        r, g, b, a = glow_layer.split()
+        a = a.point(lambda x: int(x * strength))
+        glow_layer = Image.merge('RGBA', (r, g, b, a))
+
+    # Composite glow under content
+    result = Image.new('RGBA', base_img.size, (0, 0, 0, 0))
+    result.paste(glow_layer, (0, 0))
+
+    # Convert base to RGBA if needed and composite on top
+    if base_img.mode != 'RGBA':
+        base_rgba = base_img.convert('RGBA')
+    else:
+        base_rgba = base_img
+    result = Image.alpha_composite(result, base_rgba)
+
+    return result
+
+
+def draw_glass_panel(
+    img: Image.Image,
+    xy: Tuple[int, int, int, int],
+    radius: int,
+    theme: ThemeTokens
+) -> Image.Image:
+    """Draw a glass panel with optional border and highlight (liquid glass style)."""
+    # Convert to RGBA for transparency support
+    if img.mode != 'RGBA':
+        img = img.convert('RGBA')
+
+    # Create panel layer
+    panel_layer = Image.new('RGBA', img.size, (0, 0, 0, 0))
+    panel_draw = ImageDraw.Draw(panel_layer)
+
+    # Draw panel fill
+    draw_rounded_rect(panel_draw, xy, radius, theme.panel_fill)
+
+    # Composite panel onto image
+    img = Image.alpha_composite(img, panel_layer)
+
+    # Draw border if specified
+    if theme.panel_border_width > 0 and theme.panel_border[3] > 0:
+        border_layer = Image.new('RGBA', img.size, (0, 0, 0, 0))
+        border_draw = ImageDraw.Draw(border_layer)
+        draw_rounded_rect_outline(
+            border_draw, xy, radius, theme.panel_border, theme.panel_border_width
+        )
+        img = Image.alpha_composite(img, border_layer)
+
+    # Draw highlight streak if specified (top edge)
+    if theme.panel_highlight is not None:
+        highlight_layer = Image.new('RGBA', img.size, (0, 0, 0, 0))
+        highlight_draw = ImageDraw.Draw(highlight_layer)
+        x1, y1, x2, y2 = xy
+        # Thin highlight line near top
+        highlight_draw.line(
+            [(x1 + radius, y1 + 4), (x2 - radius, y1 + 4)],
+            fill=theme.panel_highlight,
+            width=2
+        )
+        img = Image.alpha_composite(img, highlight_layer)
+
+    return img
+
+
+def draw_neon_glass_panel(
+    img: Image.Image,
+    xy: Tuple[int, int, int, int],
+    radius: int,
+    theme: ThemeTokens
+) -> Image.Image:
+    """Draw a dark glass panel with neon border and glow effect."""
+    # Apply glow first (behind everything)
+    if theme.glow.enabled:
+        img = apply_glow(
+            img, xy, radius,
+            theme.glow.color,
+            theme.glow.blur_radius,
+            theme.glow.strength
+        )
+
+    # Convert to RGBA for transparency support
+    if img.mode != 'RGBA':
+        img = img.convert('RGBA')
+
+    # Create panel layer
+    panel_layer = Image.new('RGBA', img.size, (0, 0, 0, 0))
+    panel_draw = ImageDraw.Draw(panel_layer)
+
+    # Draw panel fill
+    draw_rounded_rect(panel_draw, xy, radius, theme.panel_fill)
+
+    # Composite panel onto image
+    img = Image.alpha_composite(img, panel_layer)
+
+    # Draw neon border
+    if theme.panel_border_width > 0 and theme.panel_border[3] > 0:
+        border_layer = Image.new('RGBA', img.size, (0, 0, 0, 0))
+        border_draw = ImageDraw.Draw(border_layer)
+        draw_rounded_rect_outline(
+            border_draw, xy, radius, theme.panel_border, theme.panel_border_width
+        )
+        img = Image.alpha_composite(img, border_layer)
+
+    return img
+
+
+def draw_themed_panel(
+    img: Image.Image,
+    xy: Tuple[int, int, int, int],
+    radius: int,
+    theme: ThemeTokens
+) -> Image.Image:
+    """Draw a themed panel - routes to appropriate style based on theme."""
+    if theme.glow.enabled:
+        return draw_neon_glass_panel(img, xy, radius, theme)
+    else:
+        return draw_glass_panel(img, xy, radius, theme)
+
+
+def render_snapshot(
+    metrics: SnapshotMetrics, theme_name: Optional[str] = None
+) -> Image.Image:
+    """Render the snapshot card as a PIL Image.
+
+    Args:
+        metrics: Snapshot metrics to display
+        theme_name: Theme name (liquid_glass or dark_neon_glass). Defaults to liquid_glass.
+    """
+    # Load theme
+    theme = get_theme(theme_name or DEFAULT_THEME)
+
     # Create gradient background
-    img = create_gradient_background(WIDTH, HEIGHT)
-    draw = ImageDraw.Draw(img)
+    img = create_gradient_background(WIDTH, HEIGHT, theme)
 
     # Fonts
     font_title = get_font(64)
@@ -101,6 +272,10 @@ def render_snapshot(metrics: SnapshotMetrics) -> Image.Image:
     font_metric_value = get_font(72)
     font_metric_label = get_font(28)
     font_bar_label = get_font(20)
+
+    # Convert to RGBA for transparency support
+    img = img.convert('RGBA')
+    draw = ImageDraw.Draw(img)
 
     # Title - "Building [project_name]" or just title
     if metrics.project_name:
@@ -113,7 +288,7 @@ def render_snapshot(metrics: SnapshotMetrics) -> Image.Image:
         ((WIDTH - title_width) // 2, 80),
         title_text,
         font=font_title,
-        fill=TEXT_PRIMARY
+        fill=theme.title_text
     )
 
     # Day badge
@@ -128,13 +303,15 @@ def render_snapshot(metrics: SnapshotMetrics) -> Image.Image:
         draw,
         (badge_x, badge_y, badge_x + day_width + badge_padding * 2, badge_y + 50),
         radius=25,
-        fill=ACCENT
+        fill=theme.accent_color
     )
+    # Badge text is always white/light for contrast on accent
+    badge_text_color = (255, 255, 255) if sum(theme.accent_color) < 500 else (30, 30, 30)
     draw.text(
         (badge_x + badge_padding, badge_y + 8),
         day_text,
         font=font_day,
-        fill=TEXT_PRIMARY
+        fill=badge_text_color
     )
 
     # Metric cards
@@ -152,14 +329,11 @@ def render_snapshot(metrics: SnapshotMetrics) -> Image.Image:
 
     for i, (label, value, sublabel) in enumerate(metrics_data):
         card_y = card_start_y + (card_height + card_spacing) * i
+        card_xy = (card_margin, card_y, WIDTH - card_margin, card_y + card_height)
 
-        # Card background
-        draw_rounded_rect(
-            draw,
-            (card_margin, card_y, WIDTH - card_margin, card_y + card_height),
-            radius=20,
-            fill=CARD_BG
-        )
+        # Draw themed panel (glass effect with optional glow)
+        img = draw_themed_panel(img, card_xy, 20, theme)
+        draw = ImageDraw.Draw(img)  # Refresh draw object after image modification
 
         # Value (large)
         value_bbox = draw.textbbox((0, 0), value, font=font_metric_value)
@@ -168,7 +342,7 @@ def render_snapshot(metrics: SnapshotMetrics) -> Image.Image:
             ((WIDTH - value_width) // 2, card_y + 30),
             value,
             font=font_metric_value,
-            fill=TEXT_PRIMARY
+            fill=theme.primary_text
         )
 
         # Label
@@ -178,7 +352,7 @@ def render_snapshot(metrics: SnapshotMetrics) -> Image.Image:
             ((WIDTH - label_width) // 2, card_y + 120),
             sublabel,
             font=font_metric_label,
-            fill=TEXT_SECONDARY
+            fill=theme.secondary_text
         )
 
     # Mini bar chart
@@ -197,7 +371,7 @@ def render_snapshot(metrics: SnapshotMetrics) -> Image.Image:
         ((WIDTH - chart_title_width) // 2, chart_y),
         chart_title,
         font=font_metric_label,
-        fill=TEXT_SECONDARY
+        fill=theme.secondary_text
     )
 
     # Build week starting from Monday
@@ -229,7 +403,7 @@ def render_snapshot(metrics: SnapshotMetrics) -> Image.Image:
             draw,
             (bar_x, bar_area_top, bar_x + bar_width, bar_area_top + bar_area_height),
             radius=10,
-            fill=BAR_EMPTY
+            fill=theme.chart_bar_empty
         )
 
         # Bar fill
@@ -240,7 +414,7 @@ def render_snapshot(metrics: SnapshotMetrics) -> Image.Image:
                 draw,
                 (bar_x, fill_top, bar_x + bar_width, bar_area_top + bar_area_height),
                 radius=10,
-                fill=BAR_COLOR
+                fill=theme.chart_bar_fill
             )
 
         # Day label
@@ -250,7 +424,7 @@ def render_snapshot(metrics: SnapshotMetrics) -> Image.Image:
             (bar_x + (bar_width - label_width) // 2, bar_area_top + bar_area_height + 10),
             day_labels[i],
             font=font_bar_label,
-            fill=TEXT_SECONDARY
+            fill=theme.secondary_text
         )
 
     # Footer
@@ -261,8 +435,16 @@ def render_snapshot(metrics: SnapshotMetrics) -> Image.Image:
         ((WIDTH - footer_width) // 2, HEIGHT - 60),
         footer_text,
         font=font_bar_label,
-        fill=TEXT_SECONDARY
+        fill=theme.secondary_text
     )
+
+    # Convert back to RGB for PNG saving
+    if img.mode == 'RGBA':
+        # Create white background for liquid glass, dark for neon
+        bg_color = theme.bg_gradient_bottom
+        background = Image.new('RGB', img.size, bg_color)
+        background.paste(img, mask=img.split()[3])
+        img = background
 
     return img
 

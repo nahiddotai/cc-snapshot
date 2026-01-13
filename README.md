@@ -47,9 +47,45 @@ builder_name: "Your Name"      # Shown in the UI
 session_gap_minutes: 45        # Session detection threshold
 window_days: 7                 # Days for weekly stats
 title: ""                      # Custom title (optional)
+theme: liquid_glass            # Visual theme
 ```
 
-You can also edit Builder Name directly in the app sidebar.
+You can also edit Builder Name and Theme directly in the app sidebar.
+
+## Themes
+
+Two visual themes are available:
+
+| Theme | Description |
+|-------|-------------|
+| **Liquid Glass** (default) | Bright, airy background with frosted glass panels |
+| **Dark Neon Glass** | Dark background with neon cyan borders and glow effects |
+
+Select your theme from the sidebar dropdown.
+
+### Dev: Generate Both Themes
+
+To quickly generate one PNG in each theme for comparison:
+
+```bash
+# Activate virtual environment first
+source .venv/bin/activate
+
+# Generate both themes
+python -c "
+from src.ccsnapshot.render import render_snapshot, SnapshotMetrics
+
+metrics = SnapshotMetrics(
+    streak=7, total_minutes=2400, files_changed=42,
+    daily_minutes={}, day_number=30, project_name='test'
+)
+
+render_snapshot(metrics, 'liquid_glass').save('ccsnapshot_out/test_liquid_glass.png')
+render_snapshot(metrics, 'dark_neon_glass').save('ccsnapshot_out/test_dark_neon_glass.png')
+print('Generated: ccsnapshot_out/test_liquid_glass.png')
+print('Generated: ccsnapshot_out/test_dark_neon_glass.png')
+"
+```
 
 ## Output
 

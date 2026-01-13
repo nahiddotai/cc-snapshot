@@ -22,6 +22,7 @@ from src.ccsnapshot.render import (
     get_image_bytes,
     render_snapshot,
 )
+from src.ccsnapshot.theme import DEFAULT_THEME, list_themes
 from src.ccsnapshot.share_threads import (
     copy_to_clipboard,
     generate_caption,
@@ -76,7 +77,9 @@ def open_in_finder(path: Path) -> bool:
     return False
 
 
-def generate_snapshot_data(config: dict, project_name: str, builder_name: str) -> tuple:
+def generate_snapshot_data(
+    config: dict, project_name: str, builder_name: str, theme_name: str
+) -> tuple:
     """Generate snapshot and return (image, caption, metrics, png_path)."""
     recent_commits = get_commits_in_window(".", days=config.get("window_days", 7))
     all_commits = get_all_commits(".")
@@ -92,7 +95,7 @@ def generate_snapshot_data(config: dict, project_name: str, builder_name: str) -
         project_name=project_name,
     )
 
-    img = render_snapshot(metrics)
+    img = render_snapshot(metrics, theme_name=theme_name)
     caption = generate_caption(metrics)
 
     # Save files
@@ -127,6 +130,26 @@ def main():
         # Save if changed
         if builder_name != config.get("builder_name"):
             config["builder_name"] = builder_name
+            save_config(config)
+
+        # Theme selector
+        themes = list_themes()
+        theme_names = list(themes.keys())
+        theme_labels = list(themes.values())
+        current_theme = config.get("theme", DEFAULT_THEME)
+        current_index = theme_names.index(current_theme) if current_theme in theme_names else 0
+
+        selected_label = st.selectbox(
+            "Theme",
+            options=theme_labels,
+            index=current_index,
+            help="Visual style for your snapshot",
+        )
+        selected_theme = theme_names[theme_labels.index(selected_label)]
+
+        # Save theme if changed
+        if selected_theme != config.get("theme"):
+            config["theme"] = selected_theme
             save_config(config)
 
         st.caption(f"Project: **{project_info['project_name']}**")
@@ -228,6 +251,7 @@ def main():
                         config,
                         project_info["project_name"],
                         builder_name,
+                        selected_theme,
                     )
                     st.session_state["snapshot_bytes"] = get_image_bytes(img)
                     st.session_state["caption"] = caption

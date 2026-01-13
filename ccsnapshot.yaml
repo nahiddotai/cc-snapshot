@@ -1,13 +1,5 @@
-# CC Snapshot Configuration
-
-# Your display name (leave empty to use git author name)
-builder_name: ""
-
-# Minutes of inactivity before a new coding session
+builder_name: Nahid Haque
 session_gap_minutes: 45
-
-# How many days to include in weekly stats
+theme: liquid_glass
+title: ''
 window_days: 7
-
-# Custom title (leave empty to use "Building [project]")
-title: ""
