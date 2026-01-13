@@ -1,14 +1,13 @@
 # CC Snapshot Configuration
 
-# Optional: Override the project start date (YYYY-MM-DD)
-# If not set, uses the date of your first git commit
-# project_start_date: "2025-01-01"
+# Your display name (leave empty to use git author name)
+builder_name: ""
 
-# Minutes of inactivity before a new coding session starts
+# Minutes of inactivity before a new coding session
 session_gap_minutes: 45
 
-# How many days to include in stats
+# How many days to include in weekly stats
 window_days: 7
 
-# Title shown on the snapshot card
-title: "CC Snapshot"
+# Custom title (leave empty to use "Building [project]")
+title: ""

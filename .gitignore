@@ -1,5 +1,28 @@
-.DS_Store
+# Virtual environment
 .venv/
+venv/
+env/
+
+# Output files
 ccsnapshot_out/
+
+# Python cache
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Streamlit
+.streamlit/
